@@ -71,8 +71,22 @@ def run_digest(args: list[str]) -> Path | None:
 
 
 def main():
-    parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--digest", metavar="FILE")
+    parser = argparse.ArgumentParser(
+        prog="mattermost-assistant",
+        description="Run mattermost-digest then summarize with Claude.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  mattermost-assistant --today
+  mattermost-assistant --last-week --direct
+  mattermost-assistant --digest path/to/digest.md   # skip digest generation
+
+All arguments except --digest are forwarded to mattermost-digest.
+The summary prompt is read from ~/.config/mattermost-digest/prompt.md.
+        """,
+    )
+    parser.add_argument("--digest", metavar="FILE",
+                        help="Path to an existing digest file (skips running mattermost-digest)")
     known, forwarded = parser.parse_known_args()
 
     prompt = ensure_prompt_file()
@@ -93,7 +107,7 @@ def main():
     full_message = f"{prompt}\n\n---\n\n{digest_content}"
 
     print("\nSummarising with Claude ...\n")
-    result = subprocess.run(["claude", "-p", full_message], capture_output=True, text=True)
+    result = subprocess.run(["claude", "-p"], input=full_message, capture_output=True, text=True)
     print(result.stdout, end="")
     if result.returncode != 0:
         print(result.stderr, end="", file=sys.stderr)
