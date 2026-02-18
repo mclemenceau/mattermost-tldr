@@ -7,18 +7,29 @@ token: your_personal_access_token_here
 # The team slug (the name in the URL, e.g. https://mattermost.example.com/myteam/channels/...)
 team: myteam
 
-# Export direct/group messages instead of channels.
-# Can also be enabled at runtime with the --direct flag.
-direct_messages: false
+# --- Channel selection (pick one approach) ---
 
-# Channels to export (use the channel name as it appears in the URL).
-# Ignored when direct_messages is true or --direct is passed.
+# Option A: export every channel you are subscribed to.
+# Channels are sorted by last activity; inactive ones (no posts in the period) are skipped
+# automatically, so this is efficient even if you are in many channels.
+# Can also be enabled at runtime with the --all-channels flag.
+# When enabled, the channels list below is ignored.
+all_channels: false
+
+# Option B: export a specific list of channels (used when all_channels is false).
+# Use the channel name as it appears in the URL.
 channels:
   - town-square
   - engineering
   - random
 
-# Date range (inclusive, YYYY-MM-DD). Omit date_to to export up to today.
+# Include direct messages and group messages in addition to channels.
+# Can also be enabled at runtime with the --direct flag.
+direct_messages: false
+
+# --- Date range ---
+# Inclusive start and end dates (YYYY-MM-DD). Omit date_to to default to today.
+# These are overridden by CLI flags: --today, --yesterday, --this-week, --last-week, --days N
 date_from: "2026-02-01"
 date_to: "2026-02-18"
 

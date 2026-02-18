@@ -9,7 +9,9 @@ Usage:
     mattermost-digest --this-week
     mattermost-digest --last-week
     mattermost-digest --days 3              # last 3 days
+    mattermost-digest --all-channels        # export all subscribed channels
     mattermost-digest --direct              # also fetch direct/group messages
+    mattermost-digest --all-channels --direct  # everything
     mattermost-digest --config path/to/config.yaml --today
 """
 
@@ -108,18 +110,26 @@ class MattermostClient:
                 return None
             raise
 
-    def get_direct_channels(self, user_id: str, team_id: str | None) -> list[dict]:
-        """Return all DM (type D) and group DM (type G) channels for the user."""
+    def _fetch_member_channels(self, user_id: str, team_id: str | None) -> list[dict]:
+        """Return all channels the user is a member of (any type)."""
         if team_id:
-            all_channels = self._get(f"/users/{user_id}/teams/{team_id}/channels")
-        else:
-            # No team configured: grab the first available team
-            teams = self._get("/teams")
-            if not teams:
-                return []
-            all_channels = self._get(f"/users/{user_id}/teams/{teams[0]['id']}/channels")
-        dm_channels = [ch for ch in all_channels if ch.get("type") in ("D", "G")]
-        return sorted(dm_channels, key=lambda ch: ch.get("last_post_at", 0), reverse=True)
+            return self._get(f"/users/{user_id}/teams/{team_id}/channels")
+        teams = self._get("/teams")
+        if not teams:
+            return []
+        return self._get(f"/users/{user_id}/teams/{teams[0]['id']}/channels")
+
+    def get_direct_channels(self, user_id: str, team_id: str | None) -> list[dict]:
+        """Return all DM (type D) and group DM (type G) channels, sorted by last activity."""
+        channels = [ch for ch in self._fetch_member_channels(user_id, team_id)
+                    if ch.get("type") in ("D", "G")]
+        return sorted(channels, key=lambda ch: ch.get("last_post_at", 0), reverse=True)
+
+    def get_all_channels(self, user_id: str, team_id: str | None) -> list[dict]:
+        """Return all subscribed open (O) and private (P) channels, sorted by last activity."""
+        channels = [ch for ch in self._fetch_member_channels(user_id, team_id)
+                    if ch.get("type") in ("O", "P")]
+        return sorted(channels, key=lambda ch: ch.get("last_post_at", 0), reverse=True)
 
     def dm_display_name(self, channel: dict, current_user_id: str) -> str:
         """Human-readable name for a DM or group-DM channel."""
@@ -335,7 +345,9 @@ Date range (CLI flags override config file):
   --days N        Export the last N days (including today)
 
 Channel selection:
-  --direct        Export direct/group messages instead of configured channels
+  --all-channels  Export all channels you are subscribed to (ignores channels list in config)
+                  (also enabled by setting  all_channels: true  in config)
+  --direct        Also export direct/group messages
                   (also enabled by setting  direct_messages: true  in config)
 
 If no date flag is given, date_from / date_to from the config file are used.
@@ -346,8 +358,12 @@ If no date flag is given, date_from / date_to from the config file are used.
         help=f"Path to YAML config file (default: {DEFAULT_CONFIG})",
     )
     parser.add_argument(
+        "--all-channels", action="store_true",
+        help="Export all subscribed channels (ignores channels list in config)",
+    )
+    parser.add_argument(
         "--direct", action="store_true",
-        help="Export direct/group messages instead of configured channels",
+        help="Also export direct/group messages",
     )
 
     date_group = parser.add_mutually_exclusive_group()
@@ -378,11 +394,13 @@ def main():
     if not token or token == "your_personal_access_token_here":
         print("Error: Set your token in config.yaml or via MATTERMOST_TOKEN env var.", file=sys.stderr)
         sys.exit(1)
+    use_all    = args.all_channels or config.get("all_channels", False)
     use_direct = args.direct or config.get("direct_messages", False)
 
-    if not use_direct and not channels:
-        print("Error: No channels specified in config and direct_messages is not enabled. "
-              "Add channels to config and/or use --direct.", file=sys.stderr)
+    if not use_all and not use_direct and not channels:
+        print("Error: No channels specified in config and neither all_channels nor "
+              "direct_messages is enabled. Add channels to config, or use --all-channels "
+              "and/or --direct.", file=sys.stderr)
         sys.exit(1)
 
     date_from, date_to = date_range_from_args(args, config)
@@ -426,20 +444,31 @@ def main():
     # Build the list of (channel_dict, display_name, filename_stem) to export
     export_targets: list[tuple[dict, str, str]] = []
 
-    for channel_name in channels:
-        channel = None
-        if team_id:
-            channel = client.find_channel(team_id, channel_name)
-        if channel is None:
-            try:
-                channel = client._get("/channels/search", params={"term": channel_name})
-            except Exception:
-                pass
-        if channel is None:
-            print(f"\n  #{channel_name} ... not found, skipping.")
-            continue
-        label = channel.get("display_name") or f"#{channel_name}"
-        export_targets.append((channel, label, channel_name))
+    if use_all:
+        print("Fetching all subscribed channels ...", end=" ", flush=True)
+        all_chans = client.get_all_channels(me["id"], team_id)
+        in_range = sum(1 for ch in all_chans if ch.get("last_post_at", 0) >= after_ts)
+        print(f"{len(all_chans)} found, {in_range} active in period.")
+        for ch in all_chans:
+            if ch.get("last_post_at", 0) < after_ts:
+                break
+            label = ch.get("display_name") or ch["name"]
+            export_targets.append((ch, label, ch["name"]))
+    else:
+        for channel_name in channels:
+            channel = None
+            if team_id:
+                channel = client.find_channel(team_id, channel_name)
+            if channel is None:
+                try:
+                    channel = client._get("/channels/search", params={"term": channel_name})
+                except Exception:
+                    pass
+            if channel is None:
+                print(f"\n  #{channel_name} ... not found, skipping.")
+                continue
+            label = channel.get("display_name") or f"#{channel_name}"
+            export_targets.append((channel, label, channel_name))
 
     if use_direct:
         print("Fetching direct message channels ...", end=" ", flush=True)
