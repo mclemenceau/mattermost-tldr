@@ -1,0 +1,4 @@
+# Dependencies are declared in pyproject.toml.
+# This file exists for editors / tools that expect requirements.txt.
+requests>=2.31
+pyyaml>=6.0

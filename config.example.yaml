@@ -1,0 +1,26 @@
+server_url: https://mattermost.example.com
+
+# Personal access token — generate at: Account Settings → Security → Personal Access Tokens
+# You can also set this via the MATTERMOST_TOKEN environment variable (preferred for security)
+token: your_personal_access_token_here
+
+# The team slug (the name in the URL, e.g. https://mattermost.example.com/myteam/channels/...)
+team: myteam
+
+# Export direct/group messages instead of channels.
+# Can also be enabled at runtime with the --direct flag.
+direct_messages: false
+
+# Channels to export (use the channel name as it appears in the URL).
+# Ignored when direct_messages is true or --direct is passed.
+channels:
+  - town-square
+  - engineering
+  - random
+
+# Date range (inclusive, YYYY-MM-DD). Omit date_to to export up to today.
+date_from: "2026-02-01"
+date_to: "2026-02-18"
+
+# Directory where markdown files will be written (created if it doesn't exist)
+output_dir: ./exports
