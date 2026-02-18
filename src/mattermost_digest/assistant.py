@@ -6,11 +6,13 @@ Usage:
     mattermost-assistant                        # uses config defaults
     mattermost-assistant --today --direct
     mattermost-assistant --last-week
+    mattermost-assistant --digest path/to/digest.md   # skip digest generation
 
-All arguments are forwarded to mattermost-digest.
+All arguments (except --digest) are forwarded to mattermost-digest.
 The summary prompt is read from ~/.config/mattermost-digest/prompt.md.
 """
 
+import argparse
 import subprocess
 import sys
 from pathlib import Path
@@ -69,12 +71,22 @@ def run_digest(args: list[str]) -> Path | None:
 
 
 def main():
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--digest", metavar="FILE")
+    known, forwarded = parser.parse_known_args()
+
     prompt = ensure_prompt_file()
 
-    digest_path = run_digest(sys.argv[1:])
-    if digest_path is None:
-        print("\nNo digest file was generated — nothing to summarise.")
-        sys.exit(0)
+    if known.digest:
+        digest_path = Path(known.digest)
+        if not digest_path.exists():
+            print(f"Error: digest file not found: {digest_path}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        digest_path = run_digest(forwarded)
+        if digest_path is None:
+            print("\nNo digest file was generated — nothing to summarise.")
+            sys.exit(0)
 
     digest_content = digest_path.read_text(encoding="utf-8")
 
