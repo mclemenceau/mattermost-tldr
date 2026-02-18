@@ -14,6 +14,7 @@ dependencies = [
 
 [project.scripts]
 mattermost-digest = "mattermost_digest.cli:main"
+mattermost-assistant = "mattermost_digest.assistant:main"
 
 [tool.hatchling.build]
 packages = ["src/mattermost_digest"]
