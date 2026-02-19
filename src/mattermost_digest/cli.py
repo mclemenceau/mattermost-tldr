@@ -9,6 +9,7 @@ Usage:
     mattermost-digest --this-week
     mattermost-digest --last-week
     mattermost-digest --days 3              # last 3 days
+    mattermost-digest --hours 4             # last 4 hours
     mattermost-digest --all-channels        # export all subscribed channels
     mattermost-digest --direct              # also fetch direct/group messages
     mattermost-digest --all-channels --direct  # everything
@@ -343,6 +344,7 @@ Date range (CLI flags override config file):
   --this-week     Export from Monday of the current week to today
   --last-week     Export last Monday–Sunday
   --days N        Export the last N days (including today)
+  --hours H       Export the last H hours (sub-day precision)
 
 Channel selection:
   --all-channels  Export all channels you are subscribed to (ignores channels list in config)
@@ -371,7 +373,8 @@ If no date flag is given, date_from / date_to from the config file are used.
     date_group.add_argument("--yesterday", action="store_true", help="Export yesterday")
     date_group.add_argument("--this-week", action="store_true", help="Export Mon–today")
     date_group.add_argument("--last-week", action="store_true", help="Export last Mon–Sun")
-    date_group.add_argument("--days", type=int, metavar="N", help="Export last N days")
+    date_group.add_argument("--days",  type=int, metavar="N", help="Export last N days")
+    date_group.add_argument("--hours", type=int, metavar="H", help="Export last H hours")
 
     return parser
 
@@ -403,19 +406,29 @@ def main():
               "and/or --direct.", file=sys.stderr)
         sys.exit(1)
 
-    date_from, date_to = date_range_from_args(args, config)
+    if args.hours is not None:
+        now_dt    = datetime.now(tz=timezone.utc)
+        start_dt  = now_dt - timedelta(hours=args.hours)
+        after_ts  = int(start_dt.timestamp() * 1000)
+        before_ts = int(now_dt.timestamp() * 1000)
+        date_from = start_dt.date()
+        date_to   = now_dt.date()
+        period_label = f"last_{args.hours}h"
+        print(f"Period  : last {args.hours} hour(s) (since {start_dt.strftime('%Y-%m-%d %H:%M UTC')})")
+    else:
+        date_from, date_to = date_range_from_args(args, config)
 
-    if date_to < date_from:
-        print(f"Error: date_to ({date_to}) is before date_from ({date_from}).", file=sys.stderr)
-        sys.exit(1)
+        if date_to < date_from:
+            print(f"Error: date_to ({date_to}) is before date_from ({date_from}).", file=sys.stderr)
+            sys.exit(1)
 
-    # Convert dates to Unix ms timestamps (start of day / end of day, UTC)
-    after_ts  = int(datetime(date_from.year, date_from.month, date_from.day,
-                             tzinfo=timezone.utc).timestamp() * 1000)
-    before_ts = int(datetime(date_to.year, date_to.month, date_to.day,
-                             23, 59, 59, tzinfo=timezone.utc).timestamp() * 1000)
-
-    print(f"Period  : {date_from} → {date_to}")
+        # Convert dates to Unix ms timestamps (start of day / end of day, UTC)
+        after_ts  = int(datetime(date_from.year, date_from.month, date_from.day,
+                                 tzinfo=timezone.utc).timestamp() * 1000)
+        before_ts = int(datetime(date_to.year, date_to.month, date_to.day,
+                                 23, 59, 59, tzinfo=timezone.utc).timestamp() * 1000)
+        period_label = f"{date_from}_to_{date_to}" if date_from != date_to else str(date_from)
+        print(f"Period  : {date_from} → {date_to}")
     print(f"Server  : {server_url}")
 
     client = MattermostClient(server_url, token)
@@ -439,7 +452,6 @@ def main():
         sys.exit(1)
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    period_label = f"{date_from}_to_{date_to}" if date_from != date_to else str(date_from)
 
     # Build the list of (channel_dict, display_name, filename_stem) to export
     export_targets: list[tuple[dict, str, str]] = []
