@@ -1,7 +1,8 @@
 """Tests for build_arg_parser."""
 
 import pytest
-from mattermost_tldr.cli import build_arg_parser, BACKENDS
+
+from mattermost_tldr.cli import BACKENDS, build_arg_parser
 
 
 @pytest.fixture
@@ -69,7 +70,8 @@ class TestDateFlags:
                 parser.parse_args(pair)
 
     def test_no_date_flag_is_allowed(self, parser):
-        # No date flag → args parsed without error (config fallback handles it at runtime)
+        # No date flag → args parsed without error
+        # (config fallback handles it at runtime)
         args = parser.parse_args([])
         assert args.today is False
         assert args.yesterday is False

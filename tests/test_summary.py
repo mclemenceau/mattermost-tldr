@@ -3,19 +3,23 @@
 All filesystem and subprocess calls are mocked so tests run in full isolation.
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from mattermost_tldr.cli import run_ai_summary
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def mock_prompt():
     """Patch ensure_prompt_file so no ~/.config directory is touched."""
-    return patch("mattermost_tldr.cli.ensure_prompt_file", return_value="Summarise this:\n")
+    return patch(
+        "mattermost_tldr.cli.ensure_prompt_file",
+        return_value="Summarise this:\n",
+    )
 
 
 def mock_subprocess(stdout="Summary output", returncode=0, stderr=""):
@@ -27,7 +31,9 @@ def mock_subprocess(stdout="Summary output", returncode=0, stderr=""):
     return patch("mattermost_tldr.cli.subprocess.run", return_value=result)
 
 
-def make_digest(tmp_path, name="digest_2026-02-20.md", content="# Digest\n\nSome content."):
+def make_digest(
+    tmp_path, name="digest_2026-02-20.md", content="# Digest\n\nSome content."
+):
     """Write a digest file inside pytest's isolated tmp_path."""
     p = tmp_path / name
     p.write_text(content, encoding="utf-8")
@@ -49,15 +55,21 @@ def copilot_io():
     mock_cm.__enter__ = MagicMock(return_value=mock_file)
     mock_cm.__exit__ = MagicMock(return_value=False)
 
-    with patch("mattermost_tldr.cli.tempfile.mkstemp", return_value=(5, FAKE_TMP_PATH)), \
-         patch("mattermost_tldr.cli.os.fdopen", return_value=mock_cm), \
-         patch("mattermost_tldr.cli.os.unlink") as mock_unlink:
+    with (
+        patch(
+            "mattermost_tldr.cli.tempfile.mkstemp",
+            return_value=(5, FAKE_TMP_PATH),
+        ),
+        patch("mattermost_tldr.cli.os.fdopen", return_value=mock_cm),
+        patch("mattermost_tldr.cli.os.unlink") as mock_unlink,
+    ):
         yield mock_unlink
 
 
 # ---------------------------------------------------------------------------
 # stdin backend (claude)
 # ---------------------------------------------------------------------------
+
 
 class TestRunAiSummaryStdin:
     def test_invokes_correct_command(self, tmp_path):
@@ -74,7 +86,9 @@ class TestRunAiSummaryStdin:
         assert "Summarise this:" in stdin_input
         assert "Digest body here." in stdin_input
         # Prompt must come before the digest
-        assert stdin_input.index("Summarise this:") < stdin_input.index("Digest body here.")
+        assert stdin_input.index("Summarise this:") < stdin_input.index(
+            "Digest body here."
+        )
 
     def test_capture_output_and_text_mode(self, tmp_path):
         digest = make_digest(tmp_path)
@@ -100,7 +114,10 @@ class TestRunAiSummaryStdin:
 
     def test_nonzero_returncode_exits(self, tmp_path):
         digest = make_digest(tmp_path)
-        with mock_prompt(), mock_subprocess(stdout="", returncode=1, stderr="boom"):
+        with (
+            mock_prompt(),
+            mock_subprocess(stdout="", returncode=1, stderr="boom"),
+        ):
             with pytest.raises(SystemExit) as exc_info:
                 run_ai_summary(digest, "claude")
         assert exc_info.value.code == 1
@@ -110,10 +127,14 @@ class TestRunAiSummaryStdin:
 # file backend (copilot)
 # ---------------------------------------------------------------------------
 
+
 class TestRunAiSummaryFile:
     def test_invokes_copilot_command(self, tmp_path, copilot_io):
         digest = make_digest(tmp_path)
-        with mock_prompt(), mock_subprocess(stdout="copilot summary") as mock_run:
+        with (
+            mock_prompt(),
+            mock_subprocess(stdout="copilot summary") as mock_run,
+        ):
             run_ai_summary(digest, "copilot")
         cmd = mock_run.call_args[0][0]
         assert cmd[0] == "copilot"
@@ -128,8 +149,11 @@ class TestRunAiSummaryFile:
 
     def test_digest_content_written_to_temp_file(self, tmp_path, copilot_io):
         digest = make_digest(tmp_path, content="Important content.")
-        with mock_prompt(), mock_subprocess(stdout="ok"), \
-             patch("mattermost_tldr.cli.os.fdopen") as mock_fdopen:
+        with (
+            mock_prompt(),
+            mock_subprocess(stdout="ok"),
+            patch("mattermost_tldr.cli.os.fdopen") as mock_fdopen,
+        ):
             mock_file = MagicMock()
             mock_cm = MagicMock()
             mock_cm.__enter__ = MagicMock(return_value=mock_file)
@@ -144,8 +168,11 @@ class TestRunAiSummaryFile:
             run_ai_summary(digest, "copilot")
         copilot_io.assert_called_once_with(FAKE_TMP_PATH)
 
-    def test_temp_file_cleaned_up_on_subprocess_failure(self, tmp_path, copilot_io):
-        """The finally block must delete the temp file even when the subprocess fails."""
+    def test_temp_file_cleaned_up_on_subprocess_failure(
+        self, tmp_path, copilot_io
+    ):
+        """The finally block must delete the temp file even when
+        the subprocess fails."""
         digest = make_digest(tmp_path)
         with mock_prompt(), mock_subprocess(returncode=1, stderr="err"):
             with pytest.raises(SystemExit):
