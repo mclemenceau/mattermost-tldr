@@ -1,10 +1,16 @@
 """Tests for date range resolution and formatting helpers."""
 
-import datetime as dt
 import argparse
+import datetime as dt
+
 import pytest
 
-from mattermost_tldr.cli import date_range_from_args, ts_to_datetime, format_time, format_day_header
+from mattermost_tldr.cli import (
+    date_range_from_args,
+    format_day_header,
+    format_time,
+    ts_to_datetime,
+)
 
 # 2026-02-20 is a Friday
 FIXED_TODAY = dt.date(2026, 2, 20)
@@ -24,7 +30,14 @@ def freeze_today(monkeypatch):
 
 
 def make_args(**kwargs):
-    defaults = dict(today=False, yesterday=False, this_week=False, last_week=False, days=None, hours=None)
+    defaults = dict(
+        today=False,
+        yesterday=False,
+        this_week=False,
+        last_week=False,
+        days=None,
+        hours=None,
+    )
     defaults.update(kwargs)
     return argparse.Namespace(**defaults)
 
@@ -32,6 +45,7 @@ def make_args(**kwargs):
 # ---------------------------------------------------------------------------
 # date_range_from_args
 # ---------------------------------------------------------------------------
+
 
 class TestDateRangeFromArgs:
     def test_today(self):
@@ -87,17 +101,22 @@ class TestDateRangeFromArgs:
 
     def test_invalid_config_date_to_exits(self):
         with pytest.raises(SystemExit):
-            date_range_from_args(make_args(), {"date_from": "2026-02-01", "date_to": "bad"})
+            date_range_from_args(
+                make_args(), {"date_from": "2026-02-01", "date_to": "bad"}
+            )
 
 
 # ---------------------------------------------------------------------------
 # ts_to_datetime
 # ---------------------------------------------------------------------------
 
+
 class TestTsToDatetime:
     def test_epoch(self):
         result = ts_to_datetime(0)
-        assert result == dt.datetime(1970, 1, 1, 0, 0, 0, tzinfo=dt.timezone.utc)
+        assert result == dt.datetime(
+            1970, 1, 1, 0, 0, 0, tzinfo=dt.timezone.utc
+        )
 
     def test_known_timestamp(self):
         expected = dt.datetime(2026, 2, 20, 12, 30, 0, tzinfo=dt.timezone.utc)
@@ -117,6 +136,7 @@ class TestTsToDatetime:
 # ---------------------------------------------------------------------------
 # format_time
 # ---------------------------------------------------------------------------
+
 
 class TestFormatTime:
     def test_pads_single_digit_hour(self):
@@ -139,6 +159,7 @@ class TestFormatTime:
 # ---------------------------------------------------------------------------
 # format_day_header
 # ---------------------------------------------------------------------------
+
 
 class TestFormatDayHeader:
     def test_friday(self):

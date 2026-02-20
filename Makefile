@@ -20,6 +20,7 @@ help:
 	@echo "  lint        Run ruff linter"
 	@echo "  format      Auto-format code with ruff"
 	@echo "  type-check  Run mypy static type checker"
+	@echo "  check       Run lint, format check, and type-check in one go"
 	@echo "  test        Run the full test suite with coverage"
 	@echo "  install     Install globally with pipx (for end-user use)"
 	@echo "  uninstall   Remove the pipx installation"
@@ -42,17 +43,17 @@ $(VENV)/bin/activate:
 # Linting, formatting, type checking
 # ---------------------------------------------------------------------------
 
-.PHONY: lint
+.PHONY: lint format type-check check
 lint: setup
 	$(RUFF) check .
 
-.PHONY: format
 format: setup
 	$(RUFF) format .
 
-.PHONY: type-check
 type-check: setup
 	$(MYPY) src/
+
+check: setup lint format type-check
 
 # ---------------------------------------------------------------------------
 # Testing
@@ -66,11 +67,10 @@ test: setup
 # Global install / uninstall via pipx
 # ---------------------------------------------------------------------------
 
-.PHONY: install
+.PHONY: install uninstall
 install:
-	pipx install --editable .
+	pipx install .
 
-.PHONY: uninstall
 uninstall:
 	pipx uninstall mattermost-tldr
 

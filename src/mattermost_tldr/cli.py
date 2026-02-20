@@ -25,6 +25,7 @@ import tempfile
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any, cast
 
 import requests
 import yaml
@@ -151,11 +152,11 @@ class MattermostClient:
         resp.raise_for_status()
         return resp.json()
 
-    def get_me(self) -> dict:
-        return self._get("/users/me")
+    def get_me(self) -> dict[str, Any]:
+        return cast(dict[str, Any], self._get("/users/me"))
 
-    def find_team(self, team_name: str) -> dict:
-        teams = self._get("/teams")
+    def find_team(self, team_name: str) -> dict[str, Any]:
+        teams = cast(list[dict[str, Any]], self._get("/teams"))
         for t in teams:
             if t["name"] == team_name or t["display_name"] == team_name:
                 return t
@@ -164,9 +165,14 @@ class MattermostClient:
             f"Team '{team_name}' not found. Available teams: {names}"
         )
 
-    def find_channel(self, team_id: str, channel_name: str) -> dict | None:
+    def find_channel(
+        self, team_id: str, channel_name: str
+    ) -> dict[str, Any] | None:
         try:
-            return self._get(f"/teams/{team_id}/channels/name/{channel_name}")
+            return cast(
+                dict[str, Any],
+                self._get(f"/teams/{team_id}/channels/name/{channel_name}"),
+            )
         except requests.HTTPError as e:
             if e.response.status_code == 404:
                 return None
@@ -174,14 +180,20 @@ class MattermostClient:
 
     def _fetch_member_channels(
         self, user_id: str, team_id: str | None
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Return all channels the user is a member of (any type)."""
         if team_id:
-            return self._get(f"/users/{user_id}/teams/{team_id}/channels")
-        teams = self._get("/teams")
+            return cast(
+                list[dict[str, Any]],
+                self._get(f"/users/{user_id}/teams/{team_id}/channels"),
+            )
+        teams = cast(list[dict[str, Any]], self._get("/teams"))
         if not teams:
             return []
-        return self._get(f"/users/{user_id}/teams/{teams[0]['id']}/channels")
+        return cast(
+            list[dict[str, Any]],
+            self._get(f"/users/{user_id}/teams/{teams[0]['id']}/channels"),
+        )
 
     def get_direct_channels(
         self, user_id: str, team_id: str | None

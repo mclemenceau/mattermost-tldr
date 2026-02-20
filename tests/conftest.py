@@ -1,7 +1,8 @@
 """Shared pytest fixtures and session-level safeguards."""
 
-import pytest
 from unittest.mock import patch
+
+import pytest
 
 
 @pytest.fixture(autouse=True)
@@ -13,6 +14,7 @@ def guard_subprocess():
     Any call that slips through raises RuntimeError rather than launching
     copilot, claude, or any other external process.
     """
+
     def _deny(*args, **kwargs):
         cmd = args[0] if args else kwargs.get("args", "<unknown>")
         raise RuntimeError(

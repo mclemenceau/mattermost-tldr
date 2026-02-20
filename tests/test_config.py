@@ -1,10 +1,10 @@
 """Tests for load_config and ensure_prompt_file."""
 
-import pytest
-from pathlib import Path
 from unittest.mock import patch
 
-from mattermost_tldr.cli import load_config, ensure_prompt_file, DEFAULT_PROMPT
+import pytest
+
+from mattermost_tldr.cli import DEFAULT_PROMPT, ensure_prompt_file, load_config
 
 
 class TestLoadConfig:
@@ -40,32 +40,40 @@ class TestLoadConfig:
 class TestEnsurePromptFile:
     def test_creates_file_if_missing(self, tmp_path):
         prompt_path = tmp_path / "prompt.md"
-        with patch("mattermost_tldr.cli.CONFIG_DIR", tmp_path), \
-             patch("mattermost_tldr.cli.PROMPT_FILE", prompt_path):
+        with (
+            patch("mattermost_tldr.cli.CONFIG_DIR", tmp_path),
+            patch("mattermost_tldr.cli.PROMPT_FILE", prompt_path),
+        ):
             result = ensure_prompt_file()
         assert prompt_path.exists()
         assert result == DEFAULT_PROMPT
 
     def test_written_content_matches_default_prompt(self, tmp_path):
         prompt_path = tmp_path / "prompt.md"
-        with patch("mattermost_tldr.cli.CONFIG_DIR", tmp_path), \
-             patch("mattermost_tldr.cli.PROMPT_FILE", prompt_path):
+        with (
+            patch("mattermost_tldr.cli.CONFIG_DIR", tmp_path),
+            patch("mattermost_tldr.cli.PROMPT_FILE", prompt_path),
+        ):
             ensure_prompt_file()
         assert prompt_path.read_text(encoding="utf-8") == DEFAULT_PROMPT
 
     def test_does_not_overwrite_existing_file(self, tmp_path):
         prompt_path = tmp_path / "prompt.md"
         prompt_path.write_text("My custom prompt", encoding="utf-8")
-        with patch("mattermost_tldr.cli.CONFIG_DIR", tmp_path), \
-             patch("mattermost_tldr.cli.PROMPT_FILE", prompt_path):
+        with (
+            patch("mattermost_tldr.cli.CONFIG_DIR", tmp_path),
+            patch("mattermost_tldr.cli.PROMPT_FILE", prompt_path),
+        ):
             result = ensure_prompt_file()
         assert result == "My custom prompt"
 
     def test_creates_config_dir_if_missing(self, tmp_path):
         nested = tmp_path / "a" / "b" / "c"
         prompt_path = nested / "prompt.md"
-        with patch("mattermost_tldr.cli.CONFIG_DIR", nested), \
-             patch("mattermost_tldr.cli.PROMPT_FILE", prompt_path):
+        with (
+            patch("mattermost_tldr.cli.CONFIG_DIR", nested),
+            patch("mattermost_tldr.cli.PROMPT_FILE", prompt_path),
+        ):
             ensure_prompt_file()
         assert nested.is_dir()
         assert prompt_path.exists()
