@@ -1,30 +1,77 @@
 #!/usr/bin/env python3
 """
-mattermost-digest — Export Mattermost channel messages to LLM-ready markdown.
+mattermost-tldr — Export Mattermost messages to markdown and summarize with AI.
 
 Usage:
-    mattermost-digest                        # uses config.yaml, dates from config
-    mattermost-digest --today
-    mattermost-digest --yesterday
-    mattermost-digest --this-week
-    mattermost-digest --last-week
-    mattermost-digest --days 3              # last 3 days
-    mattermost-digest --hours 4             # last 4 hours
-    mattermost-digest --all-channels        # export all subscribed channels
-    mattermost-digest --direct              # also fetch direct/group messages
-    mattermost-digest --all-channels --direct  # everything
-    mattermost-digest --config path/to/config.yaml --today
+    mattermost-tldr --today                       # digest + AI summary (default)
+    mattermost-tldr --today --digest-only         # export digest only, no AI
+    mattermost-tldr --digest path/to/digest.md    # summarize an existing digest
+    mattermost-tldr --backend claude --today      # use Claude instead of Copilot
+    mattermost-tldr --yesterday
+    mattermost-tldr --this-week
+    mattermost-tldr --last-week
+    mattermost-tldr --days 3
+    mattermost-tldr --hours 4
+    mattermost-tldr --all-channels
+    mattermost-tldr --direct
 """
 
 import argparse
 import os
+import subprocess
 import sys
+import tempfile
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import requests
 import yaml
+
+
+# ---------------------------------------------------------------------------
+# AI backend configuration
+# ---------------------------------------------------------------------------
+
+BACKENDS: dict[str, dict] = {
+    "copilot": {
+        # Digest is written to a temp file; a short --prompt references it.
+        "cmd":        ["copilot", "--silent", "--prompt"],
+        "input_mode": "file",
+        "label":      "GitHub Copilot",
+    },
+    "claude": {
+        # Reads the prompt from stdin: claude -p
+        "cmd":        ["claude", "-p"],
+        "input_mode": "stdin",
+        "label":      "Claude",
+    },
+}
+
+DEFAULT_PROMPT = """\
+You are my personal Mattermost assistant. Analyze the digest below and give me a
+concise, actionable summary. Focus on:
+
+## What I need to follow up on
+List any open questions, requests, or action items directed at me or left unanswered.
+
+## What is most important
+Highlight decisions made, critical updates, or anything that needs my attention soon.
+
+## People
+Pay special attention to messages from or about the following people:
+- (add names here)
+
+## Keywords to watch for
+Flag any messages containing:
+- (add keywords here, e.g. "urgent", "deadline", "blocker")
+
+---
+Keep the summary structured and brief. Skip channels or threads with no meaningful activity.
+"""
+
+CONFIG_DIR  = Path.home() / ".config" / "mattermost-tldr"
+PROMPT_FILE = CONFIG_DIR / "prompt.md"
 
 
 # ---------------------------------------------------------------------------
@@ -41,11 +88,9 @@ def date_range_from_args(args, config: dict) -> tuple[date, date]:
         yesterday = today - timedelta(days=1)
         return yesterday, yesterday
     if args.this_week:
-        # Monday → today
         monday = today - timedelta(days=today.weekday())
         return monday, today
     if args.last_week:
-        # Last Monday → last Sunday
         last_monday = today - timedelta(days=today.weekday() + 7)
         last_sunday = last_monday + timedelta(days=6)
         return last_monday, last_sunday
@@ -59,7 +104,8 @@ def date_range_from_args(args, config: dict) -> tuple[date, date]:
 
     if not raw_from:
         print("Error: No date range specified. Use a CLI flag (--today, --yesterday, "
-              "--this-week, --last-week, --days N) or set date_from in config.", file=sys.stderr)
+              "--this-week, --last-week, --days N, --hours H) or set date_from in config.",
+              file=sys.stderr)
         sys.exit(1)
 
     try:
@@ -135,11 +181,9 @@ class MattermostClient:
     def dm_display_name(self, channel: dict, current_user_id: str) -> str:
         """Human-readable name for a DM or group-DM channel."""
         if channel.get("type") == "D":
-            # channel name is  userId1__userId2
             parts    = channel["name"].split("__")
             other_id = next((p for p in parts if p != current_user_id), parts[0])
             return f"DM with {self.get_username(other_id)}"
-        # Group DM: display_name is already populated by Mattermost
         return channel.get("display_name") or "Group DM"
 
     def get_username(self, user_id: str) -> str:
@@ -172,7 +216,7 @@ class MattermostClient:
                 params["before"] = before_id
 
             data = self._get(f"/channels/{channel_id}/posts", params=params)
-            order     = data.get("order", [])      # newest → oldest
+            order     = data.get("order", [])
             posts_map = data.get("posts", {})
 
             if not order:
@@ -190,15 +234,12 @@ class MattermostClient:
                 if after_ts <= ts <= before_ts:
                     posts.append(post)
 
-            # Stop if the oldest post in this batch is before our window
             if oldest_ts_in_batch is not None and oldest_ts_in_batch < after_ts:
                 break
 
-            # Stop if we got a partial page (no more posts)
             if len(order) < per_page:
                 break
 
-            # Cursor: continue from the oldest post in this page
             before_id = order[-1]
 
         return sorted(posts, key=lambda p: p["create_at"])
@@ -225,7 +266,6 @@ def render_post(post: dict, client: MattermostClient, indent: str = "") -> str:
     dt       = ts_to_datetime(post["create_at"])
     message  = post.get("message", "").strip()
 
-    # Collapse blank lines inside a single post to keep output tight
     message = "\n".join(line for line in message.splitlines() if line.strip())
 
     if not message:
@@ -233,7 +273,6 @@ def render_post(post: dict, client: MattermostClient, indent: str = "") -> str:
 
     prefix = f"{indent}**{username}** [{format_time(dt)}]"
 
-    # Multi-line messages: indent continuation lines
     lines = message.splitlines()
     if len(lines) == 1:
         return f"{prefix}: {lines[0]}"
@@ -259,7 +298,6 @@ def render_channel_markdown(
     is_dm = channel.get("type") in ("D", "G")
     title = f"Mattermost {'Direct Message' if is_dm else 'Channel'}: {channel_display}"
 
-    # Document header — gives the LLM clear context
     lines += [
         f"# {title}",
         f"",
@@ -276,7 +314,6 @@ def render_channel_markdown(
         lines.append("*No messages in this period.*")
         return "\n".join(lines)
 
-    # Group posts by day and organise threads
     posts_by_day: dict[date, list[dict]] = defaultdict(list)
     for post in posts:
         day = ts_to_datetime(post["create_at"]).date()
@@ -288,7 +325,6 @@ def render_channel_markdown(
 
         day_posts = posts_by_day[day]
 
-        # Separate top-level posts from replies
         top_level: list[dict]            = []
         replies:   dict[str, list[dict]] = defaultdict(list)
 
@@ -304,7 +340,6 @@ def render_channel_markdown(
             if rendered:
                 lines.append(rendered)
 
-            # Inline thread replies, indented
             for reply in replies.get(post["id"], []):
                 rendered_reply = render_post(reply, client, indent="  ↳ ")
                 if rendered_reply:
@@ -318,24 +353,80 @@ def render_channel_markdown(
 
 
 # ---------------------------------------------------------------------------
-# Main
+# AI summarization
 # ---------------------------------------------------------------------------
 
-DEFAULT_CONFIG = Path.home() / ".config" / "mattermost-digest" / "config.yaml"
+DEFAULT_CONFIG = CONFIG_DIR / "config.yaml"
 
+
+def ensure_prompt_file() -> str:
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    if not PROMPT_FILE.exists():
+        PROMPT_FILE.write_text(DEFAULT_PROMPT, encoding="utf-8")
+        print(f"Created default prompt at {PROMPT_FILE} — edit it to personalise your summaries.")
+    return PROMPT_FILE.read_text(encoding="utf-8")
+
+
+def run_ai_summary(digest_path: Path, backend_key: str) -> None:
+    backend = BACKENDS[backend_key]
+    prompt  = ensure_prompt_file()
+
+    digest_content = digest_path.read_text(encoding="utf-8")
+    full_message   = f"{prompt}\n\n---\n\n{digest_content}"
+
+    print(f"\nSummarising with {backend['label']} ...\n")
+
+    if backend["input_mode"] == "stdin":
+        result = subprocess.run(backend["cmd"], input=full_message, capture_output=True, text=True)
+    else:  # "file"
+        tmp_fd, tmp_path = tempfile.mkstemp(suffix=".md", prefix="mattermost_digest_")
+        try:
+            with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+                f.write(digest_content)
+            copilot_prompt = (
+                f"{prompt}\n\n"
+                f"The Mattermost digest to analyse is in the file: {tmp_path}\n\n"
+                f"Output the summary as plain text only. Do not write any files."
+            )
+            result = subprocess.run(
+                backend["cmd"] + [copilot_prompt],
+                capture_output=True, text=True,
+            )
+        finally:
+            os.unlink(tmp_path)
+
+    print(result.stdout, end="")
+    if result.returncode != 0:
+        print(result.stderr, end="", file=sys.stderr)
+        sys.exit(result.returncode)
+
+    summary_path = digest_path.parent / digest_path.name.replace("digest_", "summary_", 1)
+    summary_path.write_text(result.stdout, encoding="utf-8")
+    print(f"\n→ Summary written to {summary_path}")
+
+
+# ---------------------------------------------------------------------------
+# Config loader
+# ---------------------------------------------------------------------------
 
 def load_config(path: Path) -> dict:
     if not path.exists():
         print(f"Error: Config file not found: {path}", file=sys.stderr)
-        print(f"Copy config.example.yaml to {DEFAULT_CONFIG} and fill in your details.", file=sys.stderr)
+        print(f"Copy config.example.yaml to {DEFAULT_CONFIG} and fill in your details.",
+              file=sys.stderr)
         sys.exit(1)
     with path.open() as f:
         return yaml.safe_load(f) or {}
 
 
+# ---------------------------------------------------------------------------
+# Argument parser
+# ---------------------------------------------------------------------------
+
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Export Mattermost channel messages to LLM-ready markdown.",
+        prog="mattermost-tldr",
+        description="Export Mattermost messages to markdown and summarize with AI.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Date range (CLI flags override config file):
@@ -352,6 +443,11 @@ Channel selection:
   --direct        Also export direct/group messages
                   (also enabled by setting  direct_messages: true  in config)
 
+AI summarization:
+  --digest-only   Generate digest only, skip AI summarization
+  --digest FILE   Use an existing digest file, skip generation
+  --backend B     AI backend: copilot (default) or claude
+
 If no date flag is given, date_from / date_to from the config file are used.
         """,
     )
@@ -367,6 +463,18 @@ If no date flag is given, date_from / date_to from the config file are used.
         "--direct", action="store_true",
         help="Also export direct/group messages",
     )
+    parser.add_argument(
+        "--digest-only", action="store_true",
+        help="Generate digest only, skip AI summarization",
+    )
+    parser.add_argument(
+        "--digest", metavar="FILE",
+        help="Path to an existing digest file (skips digest generation)",
+    )
+    parser.add_argument(
+        "--backend", choices=list(BACKENDS), default="copilot", metavar="BACKEND",
+        help="AI backend: copilot (default) or claude",
+    )
 
     date_group = parser.add_mutually_exclusive_group()
     date_group.add_argument("--today",     action="store_true", help="Export today")
@@ -379,10 +487,27 @@ If no date flag is given, date_from / date_to from the config file are used.
     return parser
 
 
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
 def main():
     parser = build_arg_parser()
     args   = parser.parse_args()
 
+    # --digest FILE: skip generation, go straight to summarization
+    if args.digest:
+        digest_path = Path(args.digest)
+        if not digest_path.exists():
+            print(f"Error: digest file not found: {digest_path}", file=sys.stderr)
+            sys.exit(1)
+        if args.digest_only:
+            print("Note: --digest-only has no effect when --digest FILE is given.")
+        run_ai_summary(digest_path, args.backend)
+        print("\nDone.")
+        return
+
+    # --- Digest generation ---
     config = load_config(Path(args.config))
 
     server_url = config.get("server_url", "").rstrip("/")
@@ -395,8 +520,10 @@ def main():
         print("Error: server_url is required in config.", file=sys.stderr)
         sys.exit(1)
     if not token or token == "your_personal_access_token_here":
-        print("Error: Set your token in config.yaml or via MATTERMOST_TOKEN env var.", file=sys.stderr)
+        print("Error: Set your token in config.yaml or via MATTERMOST_TOKEN env var.",
+              file=sys.stderr)
         sys.exit(1)
+
     use_all    = args.all_channels or config.get("all_channels", False)
     use_direct = args.direct or config.get("direct_messages", False)
 
@@ -419,21 +546,21 @@ def main():
         date_from, date_to = date_range_from_args(args, config)
 
         if date_to < date_from:
-            print(f"Error: date_to ({date_to}) is before date_from ({date_from}).", file=sys.stderr)
+            print(f"Error: date_to ({date_to}) is before date_from ({date_from}).",
+                  file=sys.stderr)
             sys.exit(1)
 
-        # Convert dates to Unix ms timestamps (start of day / end of day, UTC)
         after_ts  = int(datetime(date_from.year, date_from.month, date_from.day,
                                  tzinfo=timezone.utc).timestamp() * 1000)
         before_ts = int(datetime(date_to.year, date_to.month, date_to.day,
                                  23, 59, 59, tzinfo=timezone.utc).timestamp() * 1000)
         period_label = f"{date_from}_to_{date_to}" if date_from != date_to else str(date_from)
         print(f"Period  : {date_from} → {date_to}")
+
     print(f"Server  : {server_url}")
 
     client = MattermostClient(server_url, token)
 
-    # Verify credentials
     try:
         me = client.get_me()
         print(f"Logged in as: {me['username']}")
@@ -441,7 +568,6 @@ def main():
         print(f"Authentication failed: {e}", file=sys.stderr)
         sys.exit(1)
 
-    # Resolve team
     try:
         team    = client.find_team(team_name) if team_name else None
         team_id = team["id"] if team else None
@@ -453,7 +579,6 @@ def main():
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Build the list of (channel_dict, display_name, filename_stem) to export
     export_targets: list[tuple[dict, str, str]] = []
 
     if use_all:
@@ -495,7 +620,6 @@ def main():
                 if ch.get("last_post_at", 0) < after_ts:
                     break
                 label = client.dm_display_name(ch, me["id"])
-                # Safe filename: strip spaces and slashes
                 safe  = label.replace("DM with ", "dm_").replace(" ", "_").replace("/", "_")
                 export_targets.append((ch, label, safe))
 
@@ -520,12 +644,16 @@ def main():
         )
         all_markdowns.append(markdown)
 
+    digest_path: Path | None = None
     if all_markdowns:
         filename    = f"digest_{period_label}.md"
-        output_path = output_dir / filename
-        output_path.write_text("\n\n---\n\n".join(all_markdowns), encoding="utf-8")
-        print(f"\n→ Written to {output_path}")
+        digest_path = output_dir / filename
+        digest_path.write_text("\n\n---\n\n".join(all_markdowns), encoding="utf-8")
+        print(f"\n→ Written to {digest_path}")
     else:
         print("\nNo messages found for the given period.")
+
+    if not args.digest_only and digest_path is not None:
+        run_ai_summary(digest_path, args.backend)
 
     print("\nDone.")

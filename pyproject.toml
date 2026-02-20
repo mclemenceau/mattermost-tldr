@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "mattermost-digest"
+name = "mattermost-tldr"
 version = "0.1.0"
-description = "Export Mattermost channel messages to LLM-ready markdown"
+description = "Export Mattermost messages to markdown and summarize with AI"
 requires-python = ">=3.10"
 dependencies = [
     "requests>=2.31",
@@ -13,8 +13,7 @@ dependencies = [
 ]
 
 [project.scripts]
-mattermost-digest = "mattermost_digest.cli:main"
-mattermost-assistant = "mattermost_digest.assistant:main"
+mattermost-tldr = "mattermost_tldr.cli:main"
 
 [tool.hatchling.build]
-packages = ["src/mattermost_digest"]
+packages = ["src/mattermost_tldr"]
