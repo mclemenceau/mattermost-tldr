@@ -17,6 +17,7 @@ Usage:
 """
 
 import argparse
+import logging
 import os
 import subprocess
 import sys
@@ -27,6 +28,8 @@ from pathlib import Path
 
 import requests
 import yaml
+
+log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # AI backend configuration
@@ -108,11 +111,10 @@ def date_range_from_args(
     raw_to = config.get("date_to", str(today))
 
     if not raw_from:
-        print(
+        log.error(
             "Error: No date range specified. Use a CLI flag"
             " (--today, --yesterday, --this-week, --last-week,"
-            " --days N, --hours H) or set date_from in config.",
-            file=sys.stderr,
+            " --days N, --hours H) or set date_from in config."
         )
         sys.exit(1)
 
@@ -120,7 +122,7 @@ def date_range_from_args(
         date_from = date.fromisoformat(str(raw_from))
         date_to = date.fromisoformat(str(raw_to))
     except ValueError as e:
-        print(f"Error parsing date from config: {e}", file=sys.stderr)
+        log.error("Error parsing date from config: %s", e)
         sys.exit(1)
 
     return date_from, date_to
@@ -399,9 +401,10 @@ def ensure_prompt_file() -> str:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     if not PROMPT_FILE.exists():
         PROMPT_FILE.write_text(DEFAULT_PROMPT, encoding="utf-8")
-        print(
-            f"Created default prompt at {PROMPT_FILE}"
-            " — edit it to personalise your summaries."
+        log.info(
+            "Created default prompt at %s"
+            " — edit it to personalise your summaries.",
+            PROMPT_FILE,
         )
     return PROMPT_FILE.read_text(encoding="utf-8")
 
@@ -413,7 +416,7 @@ def run_ai_summary(digest_path: Path, backend_key: str) -> None:
     digest_content = digest_path.read_text(encoding="utf-8")
     full_message = f"{prompt}\n\n---\n\n{digest_content}"
 
-    print(f"\nSummarising with {backend['label']} ...\n")
+    log.info("Summarising with %s ...", backend["label"])
 
     if backend["input_mode"] == "stdin":
         result = subprocess.run(
@@ -443,14 +446,14 @@ def run_ai_summary(digest_path: Path, backend_key: str) -> None:
 
     print(result.stdout, end="")
     if result.returncode != 0:
-        print(result.stderr, end="", file=sys.stderr)
+        log.error("%s", result.stderr.strip())
         sys.exit(result.returncode)
 
     summary_path = digest_path.parent / digest_path.name.replace(
         "digest_", "summary_", 1
     )
     summary_path.write_text(result.stdout, encoding="utf-8")
-    print(f"\n→ Summary written to {summary_path}")
+    log.info("→ Summary written to %s", summary_path)
 
 
 # ---------------------------------------------------------------------------
@@ -460,11 +463,10 @@ def run_ai_summary(digest_path: Path, backend_key: str) -> None:
 
 def load_config(path: Path) -> dict:
     if not path.exists():
-        print(f"Error: Config file not found: {path}", file=sys.stderr)
-        print(
-            f"Copy config.example.yaml to {DEFAULT_CONFIG}"
-            " and fill in your details.",
-            file=sys.stderr,
+        log.error("Error: Config file not found: %s", path)
+        log.error(
+            "Copy config.example.yaml to %s and fill in your details.",
+            DEFAULT_CONFIG,
         )
         sys.exit(1)
     with path.open() as f:
@@ -568,6 +570,7 @@ If no date flag is given, date_from / date_to from the config file are used.
 
 
 def main():
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     parser = build_arg_parser()
     args = parser.parse_args()
 
@@ -575,16 +578,14 @@ def main():
     if args.digest:
         digest_path = Path(args.digest)
         if not digest_path.exists():
-            print(
-                f"Error: digest file not found: {digest_path}", file=sys.stderr
-            )
+            log.error("Error: digest file not found: %s", digest_path)
             sys.exit(1)
         if args.digest_only:
-            print(
+            log.info(
                 "Note: --digest-only has no effect when --digest FILE is given."
             )
         run_ai_summary(digest_path, args.backend)
-        print("\nDone.")
+        log.info("Done.")
         return
 
     # --- Digest generation ---
@@ -597,13 +598,12 @@ def main():
     output_dir = Path(config.get("output_dir", "./exports"))
 
     if not server_url:
-        print("Error: server_url is required in config.", file=sys.stderr)
+        log.error("Error: server_url is required in config.")
         sys.exit(1)
     if not token or token == "your_personal_access_token_here":
-        print(
+        log.error(
             "Error: Set your token in config.yaml"
-            " or via MATTERMOST_TOKEN env var.",
-            file=sys.stderr,
+            " or via MATTERMOST_TOKEN env var."
         )
         sys.exit(1)
 
@@ -611,12 +611,11 @@ def main():
     use_direct = args.direct or config.get("direct_messages", False)
 
     if not use_all and not use_direct and not channels:
-        print(
+        log.error(
             "Error: No channels specified in config and neither"
             " all_channels nor direct_messages is enabled."
             " Add channels to config, or use --all-channels"
-            " and/or --direct.",
-            file=sys.stderr,
+            " and/or --direct."
         )
         sys.exit(1)
 
@@ -629,15 +628,15 @@ def main():
         date_to = now_dt.date()
         period_label = f"last_{args.hours}h"
         since = start_dt.strftime("%Y-%m-%d %H:%M UTC")
-        print(f"Period  : last {args.hours} hour(s) (since {since})")
+        log.info("Period  : last %s hour(s) (since %s)", args.hours, since)
     else:
         date_from, date_to = date_range_from_args(args, config)
 
         if date_to < date_from:
-            print(
-                f"Error: date_to ({date_to}) is before"
-                f" date_from ({date_from}).",
-                file=sys.stderr,
+            log.error(
+                "Error: date_to (%s) is before date_from (%s).",
+                date_to,
+                date_from,
             )
             sys.exit(1)
 
@@ -667,26 +666,26 @@ def main():
             if date_from != date_to
             else str(date_from)
         )
-        print(f"Period  : {date_from} → {date_to}")
+        log.info("Period  : %s → %s", date_from, date_to)
 
-    print(f"Server  : {server_url}")
+    log.info("Server  : %s", server_url)
 
     client = MattermostClient(server_url, token)
 
     try:
         me = client.get_me()
-        print(f"Logged in as: {me['username']}")
+        log.info("Logged in as: %s", me["username"])
     except requests.HTTPError as e:
-        print(f"Authentication failed: {e}", file=sys.stderr)
+        log.error("Authentication failed: %s", e)
         sys.exit(1)
 
     try:
         team = client.find_team(team_name) if team_name else None
         team_id = team["id"] if team else None
         if team:
-            print(f"Team    : {team['display_name']} ({team['name']})")
+            log.info("Team    : %s (%s)", team["display_name"], team["name"])
     except (ValueError, requests.HTTPError) as e:
-        print(f"Error resolving team: {e}", file=sys.stderr)
+        log.error("Error resolving team: %s", e)
         sys.exit(1)
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -694,12 +693,12 @@ def main():
     export_targets: list[tuple[dict, str, str]] = []
 
     if use_all:
-        print("Fetching all subscribed channels ...", end=" ", flush=True)
+        log.info("Fetching all subscribed channels ...")
         all_chans = client.get_all_channels(me["id"], team_id)
         in_range = sum(
             1 for ch in all_chans if ch.get("last_post_at", 0) >= after_ts
         )
-        print(f"{len(all_chans)} found, {in_range} active in period.")
+        log.info("%d found, %d active in period.", len(all_chans), in_range)
         for ch in all_chans:
             if ch.get("last_post_at", 0) < after_ts:
                 break
@@ -721,22 +720,24 @@ def main():
                     # below by the `channel is None` check.
                     pass
             if channel is None:
-                print(f"\n  #{channel_name} ... not found, skipping.")
+                log.info("  #%s ... not found, skipping.", channel_name)
                 continue
             label = channel.get("display_name") or f"#{channel_name}"
             export_targets.append((channel, label, channel_name))
 
     if use_direct:
-        print("Fetching direct message channels ...", end=" ", flush=True)
+        log.info("Fetching direct message channels ...")
         dm_channels = client.get_direct_channels(me["id"], team_id)
         if not dm_channels:
-            print("none found.")
+            log.info("none found.")
         else:
             in_range = sum(
                 1 for ch in dm_channels if ch.get("last_post_at", 0) >= after_ts
             )
-            print(f"{len(dm_channels)} found, {in_range} active in period.")
-            print("Resolving channel names ...", flush=True)
+            log.info(
+                "%d found, %d active in period.", len(dm_channels), in_range
+            )
+            log.info("Resolving channel names ...")
             for ch in dm_channels:
                 if ch.get("last_post_at", 0) < after_ts:
                     break
@@ -751,17 +752,17 @@ def main():
     all_markdowns: list[str] = []
 
     for channel, display_name, _filename_stem in export_targets:
-        print(f"\n  {display_name} ...", end=" ", flush=True)
+        log.info("  %s ...", display_name)
 
         try:
             posts = client.get_posts_in_range(
                 channel["id"], after_ts, before_ts
             )
         except requests.HTTPError as e:
-            print(f"error fetching posts: {e}")
+            log.error("error fetching posts: %s", e)
             continue
 
-        print(f"{len(posts)} messages")
+        log.info("  %d messages", len(posts))
 
         if not posts:
             continue
@@ -783,11 +784,11 @@ def main():
         digest_path.write_text(
             "\n\n---\n\n".join(all_markdowns), encoding="utf-8"
         )
-        print(f"\n→ Written to {digest_path}")
+        log.info("→ Written to %s", digest_path)
     else:
-        print("\nNo messages found for the given period.")
+        log.info("No messages found for the given period.")
 
     if not args.digest_only and digest_path is not None:
         run_ai_summary(digest_path, args.backend)
 
-    print("\nDone.")
+    log.info("Done.")
