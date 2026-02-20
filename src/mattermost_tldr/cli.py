@@ -78,7 +78,9 @@ PROMPT_FILE = CONFIG_DIR / "prompt.md"
 # Date range helpers
 # ---------------------------------------------------------------------------
 
-def date_range_from_args(args, config: dict) -> tuple[date, date]:
+def date_range_from_args(
+    args: argparse.Namespace, config: dict
+) -> tuple[date, date]:
     """Resolve the effective (date_from, date_to) from CLI flags and config."""
     today = date.today()
 
@@ -598,8 +600,13 @@ def main():
                 channel = client.find_channel(team_id, channel_name)
             if channel is None:
                 try:
-                    channel = client._get("/channels/search", params={"term": channel_name})
-                except Exception:
+                    channel = client._get(
+                        "/channels/search",
+                        params={"term": channel_name},
+                    )
+                except requests.HTTPError:
+                    # Channel search is best-effort; failure is handled
+                    # below by the `channel is None` check.
                     pass
             if channel is None:
                 print(f"\n  #{channel_name} ... not found, skipping.")
