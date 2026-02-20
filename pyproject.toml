@@ -12,8 +12,21 @@ dependencies = [
     "pyyaml>=6.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=7",
+    "pytest-cov>=4",
+]
+
 [project.scripts]
 mattermost-tldr = "mattermost_tldr.cli:main"
 
 [tool.hatchling.build]
 packages = ["src/mattermost_tldr"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--cov=mattermost_tldr --cov-report=term-missing --cov-fail-under=65"
+
+[tool.coverage.run]
+source = ["mattermost_tldr"]
