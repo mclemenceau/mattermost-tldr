@@ -477,7 +477,7 @@ def load_config(path: Path) -> dict:
     if not path.exists():
         log.error("Error: Config file not found: %s", path)
         log.error(
-            "Copy config.example.yaml to %s and fill in your details.",
+            "Copy examples/config.example.yaml to %s and fill in your details.",
             DEFAULT_CONFIG,
         )
         sys.exit(1)
