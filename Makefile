@@ -2,6 +2,9 @@ VENV   := .venv
 PYTHON := $(VENV)/bin/python
 PIP    := $(VENV)/bin/pip
 PYTEST := $(VENV)/bin/pytest
+RUFF   := $(VENV)/bin/ruff
+MYPY   := $(VENV)/bin/mypy
+BLACK  := $(VENV)/bin/black
 
 .DEFAULT_GOAL := help
 
@@ -13,11 +16,14 @@ PYTEST := $(VENV)/bin/pytest
 help:
 	@echo "Usage: make <target>"
 	@echo ""
-	@echo "  setup      Create .venv and install package + dev dependencies"
-	@echo "  test       Run the full test suite with coverage"
-	@echo "  install    Install globally with pipx (for end-user use)"
-	@echo "  uninstall  Remove the pipx installation"
-	@echo "  clean      Remove .venv, cache files, and build artefacts"
+	@echo "  setup       Create .venv and install package + dev dependencies"
+	@echo "  lint        Run ruff linter"
+	@echo "  format      Auto-format code with ruff"
+	@echo "  type-check  Run mypy static type checker"
+	@echo "  test        Run the full test suite with coverage"
+	@echo "  install     Install globally with pipx (for end-user use)"
+	@echo "  uninstall   Remove the pipx installation"
+	@echo "  clean       Remove .venv, cache files, and build artefacts"
 
 # ---------------------------------------------------------------------------
 # Development environment
@@ -31,6 +37,22 @@ $(VENV)/bin/activate:
 	$(PIP) install --quiet --upgrade pip
 	$(PIP) install --quiet -e ".[dev]"
 	@echo "Virtualenv ready. Run: source $(VENV)/bin/activate"
+
+# ---------------------------------------------------------------------------
+# Linting, formatting, type checking
+# ---------------------------------------------------------------------------
+
+.PHONY: lint
+lint: setup
+	$(RUFF) check .
+
+.PHONY: format
+format: setup
+	$(RUFF) format .
+
+.PHONY: type-check
+type-check: setup
+	$(MYPY) src/
 
 # ---------------------------------------------------------------------------
 # Testing

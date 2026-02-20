@@ -20,5 +20,14 @@ jobs:
       - name: Install dependencies
         run: pip install -e ".[dev]"
 
+      - name: Lint (ruff)
+        run: ruff check .
+
+      - name: Format check (ruff)
+        run: ruff format --check .
+
+      - name: Type check (mypy)
+        run: mypy src/
+
       - name: Run tests
         run: pytest
