@@ -16,6 +16,10 @@ venv/
 dist/
 build/
 
+# Tool caches
+.mypy_cache/
+.ruff_cache/
+
 # Editor
 .idea/
 .vscode/
