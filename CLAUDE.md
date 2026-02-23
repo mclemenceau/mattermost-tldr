@@ -40,6 +40,50 @@ pip install -e ".[dev]"
 
 ---
 
+## Git Workflow
+
+**MANDATORY: Follow these steps before and during any large change.**
+
+### Branching
+
+Before any refactoring or change touching more than ~3 files, ALWAYS:
+
+1. Run `git status` to confirm the current branch and working tree state
+2. Create a new branch: `git checkout -b <type>/<short-description>`
+   - Use types: `refactor/`, `feature/`, `fix/`, `chore/`
+   - Example: `git checkout -b refactor/simplify-export-pipeline`
+3. Confirm the branch is active before writing any code
+4. Never make multi-file changes directly on `main` or the current working branch
+
+### Atomic Commits
+
+**Commit incrementally during large changes.** Do not batch everything into one commit at the end. After each logical unit of work is complete and tests pass, create a commit. A logical unit is one of:
+
+- A single function or class refactored
+- A new test suite added
+- A dependency or configuration change
+- A standalone bug fix
+
+Run `pytest` before each commit to confirm nothing is broken.
+
+```bash
+git add -p          # stage changes interactively — prefer this over `git add .`
+git commit -m "refactor: simplify export pipeline entry point"
+```
+
+### End-of-change Review
+
+At the end of any multi-commit change, ALWAYS run:
+
+```bash
+git log --oneline origin/main..HEAD
+```
+
+Summarize the commits made before considering the work done. This gives a human
+reviewer a clear picture of the change history before a PR is opened.
+
+---
+
 ## Code Style & Linting
 
 **Always run linting before and after making changes.**
@@ -110,6 +154,7 @@ Before considering any change complete, verify:
 - [ ] `mypy .` passes with no errors
 - [ ] `pytest` passes with no failures
 - [ ] Coverage is at or above **60%**
+- [ ] `git log --oneline origin/main..HEAD` reviewed and commits are logical and clean
 
 ---
 
@@ -139,7 +184,9 @@ Before considering any change complete, verify:
 
 ## Claude-specific Guidance
 
+- **Create a branch for large changes.** Before any refactoring or change touching more than ~3 files, ALWAYS follow the Git Workflow section above. Do not skip branching even if the change seems straightforward.
 - **Ask before large refactors.** If a change affects more than ~3 files or alters public APIs, confirm the approach first.
+- **Commit incrementally.** Do not accumulate all changes into a single commit. Follow the Atomic Commits section above.
 - **Explain non-obvious decisions.** If a fix is subtle, add an inline comment.
 - **Prefer small, focused commits.** Each logical change should be independently understandable.
 - **Do not guess at intent.** If a requirement is ambiguous, ask a clarifying question before writing code.
