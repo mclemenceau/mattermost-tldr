@@ -32,7 +32,7 @@ packages = ["src/mattermost_tldr"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--cov=mattermost_tldr --cov-report=term-missing --cov-fail-under=65"
+addopts = "--cov=mattermost_tldr --cov-report=term-missing --cov-fail-under=90"
 
 [tool.coverage.run]
 source = ["mattermost_tldr"]

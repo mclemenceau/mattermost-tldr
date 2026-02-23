@@ -132,7 +132,7 @@ pytest -k "test_name"           # run matching tests
 
 ## Code Coverage
 
-**Maintain a minimum of 60% coverage.** Do not merge changes that drop coverage below this threshold.
+**Maintain a minimum of 90% coverage.** Do not merge changes that drop coverage below this threshold.
 
 ```bash
 pytest --cov=src --cov-report=term-missing          # coverage in terminal
@@ -153,7 +153,7 @@ Before considering any change complete, verify:
 - [ ] `ruff format --check .` passes (no formatting diff)
 - [ ] `mypy .` passes with no errors
 - [ ] `pytest` passes with no failures
-- [ ] Coverage is at or above **60%**
+- [ ] Coverage is at or above **90%**
 - [ ] `git log --oneline origin/main..HEAD` reviewed and commits are logical and clean
 
 ---
