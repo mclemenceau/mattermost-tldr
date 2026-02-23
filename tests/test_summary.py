@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from mattermost_tldr.cli import run_ai_summary
+from mattermost_tldr.summary import run_ai_summary
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -17,7 +17,7 @@ from mattermost_tldr.cli import run_ai_summary
 def mock_prompt():
     """Patch ensure_prompt_file so no ~/.config directory is touched."""
     return patch(
-        "mattermost_tldr.cli.ensure_prompt_file",
+        "mattermost_tldr.summary.ensure_prompt_file",
         return_value="Summarise this:\n",
     )
 
@@ -28,7 +28,7 @@ def mock_subprocess(stdout="Summary output", returncode=0, stderr=""):
     result.stdout = stdout
     result.returncode = returncode
     result.stderr = stderr
-    return patch("mattermost_tldr.cli.subprocess.run", return_value=result)
+    return patch("mattermost_tldr.summary.subprocess.run", return_value=result)
 
 
 def make_digest(
@@ -57,11 +57,11 @@ def copilot_io():
 
     with (
         patch(
-            "mattermost_tldr.cli.tempfile.mkstemp",
+            "mattermost_tldr.summary.tempfile.mkstemp",
             return_value=(5, FAKE_TMP_PATH),
         ),
-        patch("mattermost_tldr.cli.os.fdopen", return_value=mock_cm),
-        patch("mattermost_tldr.cli.os.unlink") as mock_unlink,
+        patch("mattermost_tldr.summary.os.fdopen", return_value=mock_cm),
+        patch("mattermost_tldr.summary.os.unlink") as mock_unlink,
     ):
         yield mock_unlink
 
@@ -152,7 +152,7 @@ class TestRunAiSummaryFile:
         with (
             mock_prompt(),
             mock_subprocess(stdout="ok"),
-            patch("mattermost_tldr.cli.os.fdopen") as mock_fdopen,
+            patch("mattermost_tldr.summary.os.fdopen") as mock_fdopen,
         ):
             mock_file = MagicMock()
             mock_cm = MagicMock()

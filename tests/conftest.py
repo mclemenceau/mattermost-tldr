@@ -24,5 +24,5 @@ def guard_subprocess():
             f"patch('mattermost_tldr.cli.subprocess.run') explicitly."
         )
 
-    with patch("mattermost_tldr.cli.subprocess.run", side_effect=_deny):
+    with patch("mattermost_tldr.summary.subprocess.run", side_effect=_deny):
         yield
