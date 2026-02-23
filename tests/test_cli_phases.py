@@ -120,7 +120,24 @@ class TestResolveTimeWindowHours:
             mock_dt.now.return_value = FIXED_NOW
             window = _resolve_time_window(args, {})
 
-        assert window.period_label == "last_4h"
+        # FIXED_NOW is 10:00 UTC, so 4 h back = 06:00 UTC
+        assert window.period_label == "2026-02-20T0600_to_2026-02-20T1000"
+
+    def test_period_label_is_unique_per_run(self):
+        """Two runs at different times must produce different labels."""
+        args = _args(hours=1)
+        times = [
+            datetime(2026, 2, 20, 10, 0, 0, tzinfo=timezone.utc),
+            datetime(2026, 2, 20, 11, 0, 0, tzinfo=timezone.utc),
+        ]
+        labels = []
+        for t in times:
+            with patch("mattermost_tldr.cli.datetime") as mock_dt:
+                mock_dt.now.return_value = t
+                window = _resolve_time_window(args, {})
+            labels.append(window.period_label)
+
+        assert labels[0] != labels[1]
 
     def test_date_range_spans_midnight_boundary(self):
         # 01:00 UTC on the 20th, going back 3 hours → starts on the 19th

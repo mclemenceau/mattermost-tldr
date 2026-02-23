@@ -213,7 +213,10 @@ def _resolve_time_window(args: argparse.Namespace, config: dict) -> _TimeWindow:
         before_ts = int(now_dt.timestamp() * 1000)
         date_from = start_dt.date()
         date_to = now_dt.date()
-        period_label = f"last_{args.hours}h"
+        period_label = (
+            f"{start_dt.strftime('%Y-%m-%dT%H%M')}"
+            f"_to_{now_dt.strftime('%Y-%m-%dT%H%M')}"
+        )
         since = start_dt.strftime("%Y-%m-%d %H:%M UTC")
         log.info("Period  : last %s hour(s) (since %s)", args.hours, since)
         return _TimeWindow(
