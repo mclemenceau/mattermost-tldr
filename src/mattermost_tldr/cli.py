@@ -4,8 +4,10 @@ import argparse
 import logging
 import os
 import sys
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any
 
 import requests
 
@@ -158,37 +160,37 @@ If no date flag is given, date_from / date_to from the config file are used.
 
 
 # ---------------------------------------------------------------------------
-# Main
+# Phase helpers (private)
 # ---------------------------------------------------------------------------
 
 
-def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    parser = build_arg_parser()
-    args = parser.parse_args()
+@dataclass
+class _TimeWindow:
+    after_ts: int
+    before_ts: int
+    date_from: date
+    date_to: date
+    period_label: str
 
-    # --digest FILE: skip generation, go straight to summarization
-    if args.digest:
-        digest_path = Path(args.digest)
-        if not digest_path.exists():
-            log.error("Error: digest file not found: %s", digest_path)
-            sys.exit(1)
-        if args.digest_only:
-            log.info(
-                "Note: --digest-only has no effect when --digest FILE is given."
-            )
-        run_ai_summary(digest_path, args.backend)
-        log.info("Done.")
-        return
 
-    # --- Digest generation ---
-    config = load_config(Path(args.config))
+def _handle_existing_digest(args: argparse.Namespace) -> None:
+    """Validate digest file and run AI summary; calls sys.exit on error."""
+    digest_path = Path(args.digest)
+    if not digest_path.exists():
+        log.error("Error: digest file not found: %s", digest_path)
+        sys.exit(1)
+    if args.digest_only:
+        log.info(
+            "Note: --digest-only has no effect when --digest FILE is given."
+        )
+    run_ai_summary(digest_path, args.backend)
+    log.info("Done.")
 
+
+def _validate_credentials(config: dict) -> tuple[str, str]:
+    """Validate server_url and token; return (server_url, token) or exit."""
     server_url = config.get("server_url", "").rstrip("/")
     token = os.environ.get("MATTERMOST_TOKEN") or config.get("token", "")
-    team_name = config.get("team", "")
-    channels = config.get("channels", [])
-    output_dir = Path(config.get("output_dir", "./exports"))
 
     if not server_url:
         log.error("Error: server_url is required in config.")
@@ -199,19 +201,11 @@ def main():
             " or via MATTERMOST_TOKEN env var."
         )
         sys.exit(1)
+    return server_url, str(token)
 
-    use_all = args.all_channels or config.get("all_channels", False)
-    use_direct = args.direct or config.get("direct_messages", False)
 
-    if not use_all and not use_direct and not channels:
-        log.error(
-            "Error: No channels specified in config and neither"
-            " all_channels nor direct_messages is enabled."
-            " Add channels to config, or use --all-channels"
-            " and/or --direct."
-        )
-        sys.exit(1)
-
+def _resolve_time_window(args: argparse.Namespace, config: dict) -> _TimeWindow:
+    """Compute after_ts, before_ts, date range, and period label."""
     if args.hours is not None:
         now_dt = datetime.now(tz=timezone.utc)
         start_dt = now_dt - timedelta(hours=args.hours)
@@ -222,67 +216,82 @@ def main():
         period_label = f"last_{args.hours}h"
         since = start_dt.strftime("%Y-%m-%d %H:%M UTC")
         log.info("Period  : last %s hour(s) (since %s)", args.hours, since)
-    else:
-        date_from, date_to = date_range_from_args(args, config)
-
-        if date_to < date_from:
-            log.error(
-                "Error: date_to (%s) is before date_from (%s).",
-                date_to,
-                date_from,
-            )
-            sys.exit(1)
-
-        after_ts = int(
-            datetime(
-                date_from.year,
-                date_from.month,
-                date_from.day,
-                tzinfo=timezone.utc,
-            ).timestamp()
-            * 1000
+        return _TimeWindow(
+            after_ts, before_ts, date_from, date_to, period_label
         )
-        before_ts = int(
-            datetime(
-                date_to.year,
-                date_to.month,
-                date_to.day,
-                23,
-                59,
-                59,
-                tzinfo=timezone.utc,
-            ).timestamp()
-            * 1000
+
+    date_from, date_to = date_range_from_args(args, config)
+
+    if date_to < date_from:
+        log.error(
+            "Error: date_to (%s) is before date_from (%s).",
+            date_to,
+            date_from,
         )
-        period_label = (
-            f"{date_from}_to_{date_to}"
-            if date_from != date_to
-            else str(date_from)
-        )
-        log.info("Period  : %s → %s", date_from, date_to)
+        sys.exit(1)
 
-    log.info("Server  : %s", server_url)
+    after_ts = int(
+        datetime(
+            date_from.year,
+            date_from.month,
+            date_from.day,
+            tzinfo=timezone.utc,
+        ).timestamp()
+        * 1000
+    )
+    before_ts = int(
+        datetime(
+            date_to.year,
+            date_to.month,
+            date_to.day,
+            23,
+            59,
+            59,
+            tzinfo=timezone.utc,
+        ).timestamp()
+        * 1000
+    )
+    period_label = (
+        f"{date_from}_to_{date_to}" if date_from != date_to else str(date_from)
+    )
+    log.info("Period  : %s → %s", date_from, date_to)
+    return _TimeWindow(after_ts, before_ts, date_from, date_to, period_label)
 
-    client = MattermostClient(server_url, token)
 
+def _authenticate(client: MattermostClient) -> dict[str, Any]:
+    """Verify credentials; return the 'me' user dict or call sys.exit(1)."""
     try:
         me = client.get_me()
         log.info("Logged in as: %s", me["username"])
+        return me
     except requests.HTTPError as e:
         log.error("Authentication failed: %s", e)
         sys.exit(1)
 
+
+def _resolve_team(client: MattermostClient, team_name: str) -> str | None:
+    """Resolve team_id by name; return None if unconfigured, or exit."""
     try:
         team = client.find_team(team_name) if team_name else None
-        team_id = team["id"] if team else None
+        team_id: str | None = team["id"] if team else None
         if team:
             log.info("Team    : %s (%s)", team["display_name"], team["name"])
+        return team_id
     except (ValueError, requests.HTTPError) as e:
         log.error("Error resolving team: %s", e)
         sys.exit(1)
 
-    output_dir.mkdir(parents=True, exist_ok=True)
 
+def _collect_channel_targets(
+    client: MattermostClient,
+    me: dict[str, Any],
+    team_id: str | None,
+    channels: list,
+    use_all: bool,
+    use_direct: bool,
+    after_ts: int,
+) -> list[tuple[dict, str, str]]:
+    """Resolve channels to export as (channel, label, stem) triples."""
     export_targets: list[tuple[dict, str, str]] = []
 
     if use_all:
@@ -342,6 +351,18 @@ def main():
                 )
                 export_targets.append((ch, label, safe))
 
+    return export_targets
+
+
+def _fetch_and_render_channels(
+    client: MattermostClient,
+    export_targets: list[tuple[dict, str, str]],
+    after_ts: int,
+    before_ts: int,
+    date_from: date,
+    date_to: date,
+) -> list[str]:
+    """Fetch posts and render markdown for each channel target."""
     all_markdowns: list[str] = []
 
     for channel, display_name, _filename_stem in export_targets:
@@ -370,16 +391,76 @@ def main():
         )
         all_markdowns.append(markdown)
 
-    digest_path: Path | None = None
-    if all_markdowns:
-        filename = f"digest_{period_label}.md"
-        digest_path = output_dir / filename
-        digest_path.write_text(
-            "\n\n---\n\n".join(all_markdowns), encoding="utf-8"
-        )
-        log.info("→ Written to %s", digest_path)
-    else:
+    return all_markdowns
+
+
+def _write_digest(
+    all_markdowns: list[str],
+    output_dir: Path,
+    period_label: str,
+) -> Path | None:
+    """Write markdowns to a single digest file; return path or None."""
+    if not all_markdowns:
         log.info("No messages found for the given period.")
+        return None
+    filename = f"digest_{period_label}.md"
+    digest_path = output_dir / filename
+    digest_path.write_text("\n\n---\n\n".join(all_markdowns), encoding="utf-8")
+    log.info("→ Written to %s", digest_path)
+    return digest_path
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+
+def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    args = build_arg_parser().parse_args()
+
+    if args.digest:
+        _handle_existing_digest(args)
+        return
+
+    config = load_config(Path(args.config))
+    server_url, token = _validate_credentials(config)
+
+    use_all: bool = args.all_channels or bool(config.get("all_channels", False))
+    use_direct: bool = args.direct or bool(config.get("direct_messages", False))
+    channels: list = config.get("channels", [])
+
+    if not use_all and not use_direct and not channels:
+        log.error(
+            "Error: No channels specified in config and neither"
+            " all_channels nor direct_messages is enabled."
+            " Add channels to config, or use --all-channels"
+            " and/or --direct."
+        )
+        sys.exit(1)
+
+    window = _resolve_time_window(args, config)
+    log.info("Server  : %s", server_url)
+
+    client = MattermostClient(server_url, token)
+    me = _authenticate(client)
+    team_id = _resolve_team(client, config.get("team", ""))
+
+    output_dir = Path(config.get("output_dir", "./exports"))
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    export_targets = _collect_channel_targets(
+        client, me, team_id, channels, use_all, use_direct, window.after_ts
+    )
+    all_markdowns = _fetch_and_render_channels(
+        client,
+        export_targets,
+        window.after_ts,
+        window.before_ts,
+        window.date_from,
+        window.date_to,
+    )
+    digest_path = _write_digest(all_markdowns, output_dir, window.period_label)
 
     if not args.digest_only and digest_path is not None:
         run_ai_summary(digest_path, args.backend)
