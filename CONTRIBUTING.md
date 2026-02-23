@@ -59,7 +59,7 @@ make setup   # create .venv and install package + dev dependencies
 - Keep line length at 80 characters (configured in `pyproject.toml`).
 - Do not use `print()` — use `logging` instead.
 - Do not silently swallow exceptions — log or re-raise with context.
-- Maintain test coverage at or above **60%**. New modules must ship with
+- Maintain test coverage at or above *90%**. New modules must ship with
   corresponding tests.
 
 Run the full quality check at any time:

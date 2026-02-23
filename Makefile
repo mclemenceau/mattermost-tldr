@@ -56,7 +56,6 @@ type-check: setup
 
 check: setup lint type-check
 	$(RUFF) format --check .
-	$(BLACK) --check .
 
 # ---------------------------------------------------------------------------
 # Testing
