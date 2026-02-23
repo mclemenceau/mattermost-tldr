@@ -204,9 +204,7 @@ def _validate_credentials(config: dict) -> tuple[str, str]:
     return server_url, str(token)
 
 
-def _resolve_time_window(
-    args: argparse.Namespace, config: dict
-) -> _TimeWindow:
+def _resolve_time_window(args: argparse.Namespace, config: dict) -> _TimeWindow:
     """Compute after_ts, before_ts, date range, and period label."""
     if args.hours is not None:
         now_dt = datetime.now(tz=timezone.utc)
@@ -254,9 +252,7 @@ def _resolve_time_window(
         * 1000
     )
     period_label = (
-        f"{date_from}_to_{date_to}"
-        if date_from != date_to
-        else str(date_from)
+        f"{date_from}_to_{date_to}" if date_from != date_to else str(date_from)
     )
     log.info("Period  : %s → %s", date_from, date_to)
     return _TimeWindow(after_ts, before_ts, date_from, date_to, period_label)
@@ -273,17 +269,13 @@ def _authenticate(client: MattermostClient) -> dict[str, Any]:
         sys.exit(1)
 
 
-def _resolve_team(
-    client: MattermostClient, team_name: str
-) -> str | None:
+def _resolve_team(client: MattermostClient, team_name: str) -> str | None:
     """Resolve team_id by name; return None if unconfigured, or exit."""
     try:
         team = client.find_team(team_name) if team_name else None
         team_id: str | None = team["id"] if team else None
         if team:
-            log.info(
-                "Team    : %s (%s)", team["display_name"], team["name"]
-            )
+            log.info("Team    : %s (%s)", team["display_name"], team["name"])
         return team_id
     except (ValueError, requests.HTTPError) as e:
         log.error("Error resolving team: %s", e)
@@ -413,9 +405,7 @@ def _write_digest(
         return None
     filename = f"digest_{period_label}.md"
     digest_path = output_dir / filename
-    digest_path.write_text(
-        "\n\n---\n\n".join(all_markdowns), encoding="utf-8"
-    )
+    digest_path.write_text("\n\n---\n\n".join(all_markdowns), encoding="utf-8")
     log.info("→ Written to %s", digest_path)
     return digest_path
 
