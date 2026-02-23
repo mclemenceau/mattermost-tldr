@@ -18,9 +18,9 @@ help:
 	@echo ""
 	@echo "  setup       Create .venv and install package + dev dependencies"
 	@echo "  lint        Run ruff linter"
-	@echo "  format      Auto-format code with ruff"
+	@echo "  format      Auto-format code with ruff and black"
 	@echo "  type-check  Run mypy static type checker"
-	@echo "  check       Run lint, format check, and type-check in one go"
+	@echo "  check       Run lint, format check (ruff + black), and type-check"
 	@echo "  test        Run the full test suite with coverage"
 	@echo "  install     Install globally with pipx (for end-user use)"
 	@echo "  uninstall   Remove the pipx installation"
@@ -49,11 +49,14 @@ lint: setup
 
 format: setup
 	$(RUFF) format .
+	$(BLACK) .
 
 type-check: setup
 	$(MYPY) src/
 
-check: setup lint format type-check
+check: setup lint type-check
+	$(RUFF) format --check .
+	$(BLACK) --check .
 
 # ---------------------------------------------------------------------------
 # Testing
