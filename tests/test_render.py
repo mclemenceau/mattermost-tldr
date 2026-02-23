@@ -3,7 +3,7 @@
 import datetime as dt
 from unittest.mock import MagicMock
 
-from mattermost_tldr.cli import render_channel_markdown, render_post
+from mattermost_tldr.render import render_channel_markdown, render_post
 
 # A fixed base timestamp: 2026-02-20 10:00:00 UTC
 TS_BASE = int(

@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-from mattermost_tldr.cli import MattermostClient
+from mattermost_tldr.client import MattermostClient
 
 
 def make_response(json_data, status_code=200):

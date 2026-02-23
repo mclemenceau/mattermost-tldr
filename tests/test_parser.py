@@ -2,7 +2,8 @@
 
 import pytest
 
-from mattermost_tldr.cli import BACKENDS, build_arg_parser
+from mattermost_tldr.cli import build_arg_parser
+from mattermost_tldr.summary import BACKENDS
 
 
 @pytest.fixture

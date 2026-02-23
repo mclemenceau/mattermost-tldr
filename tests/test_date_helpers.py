@@ -5,8 +5,8 @@ import datetime as dt
 
 import pytest
 
-from mattermost_tldr.cli import (
-    date_range_from_args,
+from mattermost_tldr.cli import date_range_from_args
+from mattermost_tldr.render import (
     format_day_header,
     format_time,
     ts_to_datetime,
