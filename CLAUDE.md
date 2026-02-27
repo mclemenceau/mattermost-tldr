@@ -191,3 +191,68 @@ Before considering any change complete, verify:
 - **Prefer small, focused commits.** Each logical change should be independently understandable.
 - **Do not guess at intent.** If a requirement is ambiguous, ask a clarifying question before writing code.
 - **Surface tradeoffs.** If there are multiple valid approaches, briefly describe them before choosing one.
+
+---
+
+## Release Process
+
+Releases are published automatically by `.github/workflows/release.yml`
+when a version tag is pushed. The workflow re-runs all quality checks,
+verifies the tag matches `pyproject.toml`, builds wheel + sdist, and
+creates a GitHub Release with auto-generated notes and artifacts attached.
+
+`bump-my-version` handles the mechanical parts: it updates `pyproject.toml`,
+creates the release commit (including any staged files), and creates the
+annotated tag — all in one command.
+
+### Steps
+
+1. **Update `CHANGELOG.md`.**
+   - Move the entries under `[Unreleased]` into a new versioned section:
+     ```markdown
+     ## [0.2.0] - 2026-03-15
+     ```
+   - Leave `[Unreleased]` at the top with empty subsections.
+   - Add the new comparison link at the bottom:
+     ```markdown
+     [0.2.0]: https://github.com/mclemenceau/mattermost-tldr/compare/v0.1.1...v0.2.0
+     ```
+   - Update the `[Unreleased]` footer link:
+     ```markdown
+     [Unreleased]: https://github.com/mclemenceau/mattermost-tldr/compare/v0.2.0...HEAD
+     ```
+
+2. **Stage `CHANGELOG.md`.**
+   ```bash
+   git add CHANGELOG.md
+   ```
+   `bump-my-version` will include it in the release commit automatically.
+
+3. **Run the version bump.**
+   ```bash
+   make bump-minor   # 0.1.x → 0.2.0
+   make bump-patch   # 0.1.0 → 0.1.1
+   make bump-major   # 0.1.x → 1.0.0
+   ```
+   This updates `pyproject.toml`, creates the commit `chore: release v0.2.0`,
+   and creates the annotated tag `v0.2.0`.
+
+4. **Push the commit and tag.**
+   ```bash
+   git push origin main --follow-tags
+   ```
+
+5. **Verify the release.**
+   Open the **Actions** tab and confirm the `Release` workflow passes.
+   Check the **Releases** page for the new release with attached artifacts.
+
+### Recovery: wrong tag or mismatch
+
+If the release workflow fails at the version-check step, it means the tag
+version and `pyproject.toml` are out of sync. Delete the tag and fix:
+
+```bash
+git tag -d v0.2.0                  # delete local tag
+git push origin :refs/tags/v0.2.0  # delete remote tag
+# fix the mismatch, then re-run from step 3
+```
