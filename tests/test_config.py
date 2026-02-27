@@ -8,6 +8,7 @@ from mattermost_tldr.config import (
     DEFAULT_PROMPT,
     ensure_prompt_file,
     load_config,
+    resolve_prompt_file,
 )
 
 
@@ -81,3 +82,43 @@ class TestEnsurePromptFile:
             ensure_prompt_file()
         assert nested.is_dir()
         assert prompt_path.exists()
+
+
+class TestResolvePromptFile:
+    def test_loads_existing_file_path(self, tmp_path):
+        prompt = tmp_path / "custom.md"
+        prompt.write_text("My custom prompt", encoding="utf-8")
+        result = resolve_prompt_file(str(prompt))
+        assert result == "My custom prompt"
+
+    def test_loads_preset_by_stem_without_extension(self, tmp_path):
+        preset = tmp_path / "weekly.md"
+        preset.write_text("Weekly preset", encoding="utf-8")
+        with patch("mattermost_tldr.config.CONFIG_DIR", tmp_path):
+            result = resolve_prompt_file("weekly")
+        assert result == "Weekly preset"
+
+    def test_loads_preset_by_stem_with_md_extension(self, tmp_path):
+        preset = tmp_path / "weekly.md"
+        preset.write_text("Weekly preset", encoding="utf-8")
+        with patch("mattermost_tldr.config.CONFIG_DIR", tmp_path):
+            result = resolve_prompt_file("weekly.md")
+        assert result == "Weekly preset"
+
+    def test_direct_path_takes_precedence_over_config_dir(self, tmp_path):
+        direct = tmp_path / "direct.md"
+        direct.write_text("Direct prompt", encoding="utf-8")
+        config_dir = tmp_path / "config"
+        config_dir.mkdir()
+        (config_dir / "direct.md").write_text("Config preset", encoding="utf-8")
+        with patch("mattermost_tldr.config.CONFIG_DIR", config_dir):
+            result = resolve_prompt_file(str(direct))
+        assert result == "Direct prompt"
+
+    def test_exits_when_prompt_not_found(self, tmp_path):
+        with (
+            patch("mattermost_tldr.config.CONFIG_DIR", tmp_path),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            resolve_prompt_file("nonexistent")
+        assert exc_info.value.code != 0

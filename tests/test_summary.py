@@ -186,3 +186,38 @@ class TestRunAiSummaryFile:
         summary = tmp_path / "summary_2026-02-20.md"
         assert summary.exists()
         assert summary.read_text() == "copilot output"
+
+
+# ---------------------------------------------------------------------------
+# prompt override
+# ---------------------------------------------------------------------------
+
+
+class TestRunAiSummaryPromptOverride:
+    def test_uses_provided_prompt_instead_of_file(self, tmp_path):
+        digest = make_digest(tmp_path, content="Some digest.")
+        with (
+            patch("mattermost_tldr.summary.ensure_prompt_file") as mock_ensure,
+            mock_subprocess() as mock_run,
+        ):
+            run_ai_summary(digest, "claude", prompt="Override prompt.")
+        mock_ensure.assert_not_called()
+        stdin_input = mock_run.call_args[1]["input"]
+        assert "Override prompt." in stdin_input
+
+    def test_falls_back_to_ensure_prompt_file_when_prompt_is_none(
+        self, tmp_path
+    ):
+        digest = make_digest(tmp_path)
+        with mock_prompt() as mock_ensure, mock_subprocess():
+            run_ai_summary(digest, "claude", prompt=None)
+        mock_ensure.assert_called_once()
+
+    def test_override_prompt_appears_before_digest(self, tmp_path):
+        digest = make_digest(tmp_path, content="Digest body.")
+        with mock_subprocess() as mock_run:
+            run_ai_summary(digest, "claude", prompt="Custom prompt.")
+        stdin_input = mock_run.call_args[1]["input"]
+        assert stdin_input.index("Custom prompt.") < stdin_input.index(
+            "Digest body."
+        )

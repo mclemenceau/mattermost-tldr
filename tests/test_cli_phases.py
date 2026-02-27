@@ -36,6 +36,7 @@ def _args(**kwargs) -> argparse.Namespace:
         digest=None,
         digest_only=False,
         backend="copilot",
+        prompt=None,
     )
     defaults.update(kwargs)
     return argparse.Namespace(**defaults)
@@ -502,7 +503,9 @@ class TestHandleExistingDigest:
         with patch("mattermost_tldr.cli.run_ai_summary") as mock_summary:
             _handle_existing_digest(args)
 
-        mock_summary.assert_called_once_with(digest_file, "copilot")
+        mock_summary.assert_called_once_with(
+            digest_file, "copilot", prompt=None
+        )
 
     def test_digest_only_note_is_logged(self, tmp_path, caplog):
         digest_file = tmp_path / "digest.md"
