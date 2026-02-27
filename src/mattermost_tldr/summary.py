@@ -29,9 +29,14 @@ BACKENDS: dict[str, dict] = {
 }
 
 
-def run_ai_summary(digest_path: Path, backend_key: str) -> None:
+def run_ai_summary(
+    digest_path: Path,
+    backend_key: str,
+    prompt: str | None = None,
+) -> None:
     backend = BACKENDS[backend_key]
-    prompt = ensure_prompt_file()
+    if prompt is None:
+        prompt = ensure_prompt_file()
 
     digest_content = digest_path.read_text(encoding="utf-8")
     full_message = f"{prompt}\n\n---\n\n{digest_content}"
