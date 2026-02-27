@@ -12,7 +12,7 @@ from typing import Any
 import requests
 
 from .client import MattermostClient
-from .config import DEFAULT_CONFIG, load_config
+from .config import DEFAULT_CONFIG, load_config, resolve_prompt_file
 from .render import render_channel_markdown
 from .summary import BACKENDS, run_ai_summary
 
@@ -100,6 +100,9 @@ AI summarization:
   --digest-only   Generate digest only, skip AI summarization
   --digest FILE   Use an existing digest file, skip generation
   --backend B     AI backend: copilot (default) or claude
+  --prompt NAME   Override the AI prompt. NAME can be a file path or the stem
+                  of a preset in ~/.config/mattermost-tldr/ (e.g. "weekly"
+                  loads ~/.config/mattermost-tldr/weekly.md)
 
 If no date flag is given, date_from / date_to from the config file are used.
         """,
@@ -136,6 +139,16 @@ If no date flag is given, date_from / date_to from the config file are used.
         default="copilot",
         metavar="BACKEND",
         help="AI backend: copilot (default) or claude",
+    )
+    parser.add_argument(
+        "--prompt",
+        metavar="NAME",
+        default=None,
+        help=(
+            "Override the AI prompt. NAME is a file path or a preset name"
+            " in ~/.config/mattermost-tldr/ (e.g. 'weekly' loads"
+            " ~/.config/mattermost-tldr/weekly.md)"
+        ),
     )
 
     date_group = parser.add_mutually_exclusive_group()
@@ -183,7 +196,8 @@ def _handle_existing_digest(args: argparse.Namespace) -> None:
         log.info(
             "Note: --digest-only has no effect when --digest FILE is given."
         )
-    run_ai_summary(digest_path, args.backend)
+    prompt = resolve_prompt_file(args.prompt) if args.prompt else None
+    run_ai_summary(digest_path, args.backend, prompt=prompt)
     log.info("Done.")
 
 
@@ -466,6 +480,7 @@ def main() -> None:
     digest_path = _write_digest(all_markdowns, output_dir, window.period_label)
 
     if not args.digest_only and digest_path is not None:
-        run_ai_summary(digest_path, args.backend)
+        prompt = resolve_prompt_file(args.prompt) if args.prompt else None
+        run_ai_summary(digest_path, args.backend, prompt=prompt)
 
     log.info("Done.")
