@@ -4,7 +4,7 @@
 
 | Module | Responsibility |
 |---|---|
-| `config.py` | Constants (`DEFAULT_PROMPT`, `CONFIG_DIR`, `PROMPT_FILE`, `DEFAULT_CONFIG`), prompt-file management (`ensure_prompt_file`), YAML config loading (`load_config`) |
+| `config.py` | Constants (`DEFAULT_PROMPT`, `CONFIG_DIR`, `PROMPT_FILE`, `DEFAULT_CONFIG`), prompt-file management (`ensure_prompt_file`, `resolve_prompt_file`), YAML config loading (`load_config`) |
 | `client.py` | `MattermostClient` — all HTTP calls to the Mattermost API v4 |
 | `render.py` | Convert raw post dicts to LLM-optimised Markdown (`render_post`, `render_channel_markdown`, timestamp helpers) |
 | `summary.py` | AI backend registry (`BACKENDS`) and `run_ai_summary` orchestration |
@@ -27,10 +27,17 @@ All persistent user data lives under `~/.config/mattermost-tldr/`:
 | File | Purpose |
 |---|---|
 | `~/.config/mattermost-tldr/config.yaml` | Server URL, token, team, channel list, output directory |
-| `~/.config/mattermost-tldr/prompt.md` | System prompt prepended to every AI summary request |
+| `~/.config/mattermost-tldr/prompt.md` | Default system prompt prepended to every AI summary request |
+| `~/.config/mattermost-tldr/<name>.md` | Named prompt preset, selectable via `--prompt <name>` |
 
 `ensure_prompt_file()` creates `prompt.md` from `DEFAULT_PROMPT` on first run.
 Edit it to tailor summaries to your workflow (people to watch, keywords, etc.).
+
+`resolve_prompt_file(name_or_path)` resolves the `--prompt` argument:
+1. Uses the argument as a literal file path if the file exists.
+2. Otherwise looks for `~/.config/mattermost-tldr/<name_or_path>.md`
+   (`.md` is appended automatically when not already present).
+3. Exits with a clear error if neither location exists.
 
 ## Adding a new AI backend
 

@@ -15,6 +15,7 @@ __all__ = [
     "DEFAULT_CONFIG",
     "ensure_prompt_file",
     "load_config",
+    "resolve_prompt_file",
 ]
 
 DEFAULT_PROMPT = """\
@@ -57,6 +58,36 @@ def ensure_prompt_file() -> str:
             PROMPT_FILE,
         )
     return PROMPT_FILE.read_text(encoding="utf-8")
+
+
+def resolve_prompt_file(name_or_path: str) -> str:
+    """Load prompt text from a file path or a named preset.
+
+    Resolution order:
+    1. ``name_or_path`` as a literal path – used if the file exists.
+    2. ``CONFIG_DIR/<name_or_path>`` (appending ``.md`` when the argument
+       has no suffix) – used if that file exists.
+
+    Exits with an error message when neither location is found.
+    """
+    direct = Path(name_or_path)
+    if direct.exists():
+        return direct.read_text(encoding="utf-8")
+
+    stem = (
+        name_or_path if name_or_path.endswith(".md") else f"{name_or_path}.md"
+    )
+    config_path = CONFIG_DIR / stem
+    if config_path.exists():
+        return config_path.read_text(encoding="utf-8")
+
+    log.error(
+        "Error: prompt file not found: '%s'. "
+        "Provide a valid file path or place a preset at %s.",
+        name_or_path,
+        config_path,
+    )
+    sys.exit(1)
 
 
 def load_config(path: Path) -> dict:

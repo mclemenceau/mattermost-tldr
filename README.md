@@ -139,6 +139,24 @@ On first run the tool writes a default prompt to
 the people and keywords that matter to you. See
 [`examples/prompt.md`](examples/prompt.md) for the default prompt.
 
+#### Prompt presets
+
+You can create multiple named prompt files in `~/.config/mattermost-tldr/`
+and switch between them with `--prompt`:
+
+```bash
+# Create a weekly-review preset
+cp examples/prompt.md ~/.config/mattermost-tldr/weekly.md
+# … edit weekly.md with a different focus …
+
+# Use it at the command line
+mattermost-tldr --last-week --prompt weekly
+```
+
+`--prompt` accepts either a **preset name** (looked up as
+`~/.config/mattermost-tldr/<name>.md`) or a **file path** (used directly
+if the file exists).
+
 ## Usage
 
 ### Common invocations
@@ -168,6 +186,12 @@ mattermost-tldr --today --direct
 
 # Use Claude instead of GitHub Copilot
 mattermost-tldr --today --backend claude
+
+# Override the AI prompt with a named preset
+mattermost-tldr --today --prompt weekly
+
+# Override the AI prompt with a local file
+mattermost-tldr --today --prompt ./my_prompt.md
 ```
 
 ### Digest-only mode
@@ -191,6 +215,7 @@ using `--digest-only`:
 ```bash
 mattermost-tldr --digest exports/digest_2026-02-20.md
 mattermost-tldr --digest exports/digest_2026-02-20.md --backend claude
+mattermost-tldr --digest exports/digest_2026-02-20.md --prompt weekly
 ```
 
 ### Custom config path

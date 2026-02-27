@@ -132,3 +132,24 @@ class TestConfigFlag:
     def test_custom_config_path(self, parser):
         args = parser.parse_args(["--today", "--config", "/custom/config.yaml"])
         assert args.config == "/custom/config.yaml"
+
+
+class TestPromptFlag:
+    def test_prompt_default_is_none(self, parser):
+        args = parser.parse_args(["--today"])
+        assert args.prompt is None
+
+    def test_prompt_accepts_name(self, parser):
+        args = parser.parse_args(["--today", "--prompt", "weekly"])
+        assert args.prompt == "weekly"
+
+    def test_prompt_accepts_file_path(self, parser):
+        args = parser.parse_args(["--today", "--prompt", "/tmp/my_prompt.md"])
+        assert args.prompt == "/tmp/my_prompt.md"
+
+    def test_prompt_works_with_digest_flag(self, parser):
+        args = parser.parse_args(
+            ["--digest", "digest.md", "--prompt", "weekly"]
+        )
+        assert args.prompt == "weekly"
+        assert args.digest == "digest.md"
